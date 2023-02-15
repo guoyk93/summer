@@ -1,2 +1,3 @@
 # summer
-golang application framework
+
+minimal mesh-native golang microservice framework
