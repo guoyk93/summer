@@ -12,7 +12,7 @@ func WithConcurrency(c int) Option {
 	}
 }
 
-// WithReadinessCascade set maximum continuous failed Readiness Checks after which Liveness Check start to fail.
+// WithReadinessCascade set maximum continuous failed Readiness Checks after which Liveness CheckFunc start to fail.
 //
 // Failing Liveness Checks could trigger a Pod restart.
 //

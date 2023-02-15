@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/guoyk93/rg"
-	"github.com/guoyk93/summer/pkg/clientip"
 	"net/http"
 	"strconv"
 	"sync"
 )
 
+// Context context of a incoming request and corresponding response
 type Context interface {
 	context.Context
 
@@ -22,10 +22,12 @@ type Context interface {
 	// ClientIP client ip calculated from X-Forwarded-For header
 	ClientIP() string
 
-	// Bind unmarshal the request into struct with json tags
+	// Bind unmarshal the request data into any struct with json tags
 	//
 	// HTTP header is prefixed with "header_"
+	//
 	// HTTP query is prefixed with "query_"
+	//
 	// both JSON and Form are supported
 	Bind(data interface{})
 
@@ -70,8 +72,8 @@ func (c *summerContext) Res() http.ResponseWriter {
 }
 
 func (c *summerContext) receive() {
-	m, err := flattenRequest(c.req)
-	if err != nil {
+	var m = map[string]any{}
+	if err := flattenRequest(m, c.req); err != nil {
 		panic(ErrorWithHTTPStatus(err, http.StatusBadRequest))
 	}
 	c.buf = rg.Must(json.Marshal(m))
@@ -88,7 +90,7 @@ func (c *summerContext) Bind(data interface{}) {
 }
 
 func (c *summerContext) ClientIP() string {
-	return clientip.DefaultExtractor(c.req)
+	return extractClientIP(c.req)
 }
 
 func (c *summerContext) Code(code int) {
@@ -97,6 +99,7 @@ func (c *summerContext) Code(code int) {
 func (c *summerContext) Body(contentType string, buf []byte) {
 	c.rw.Header().Set("Content-Type", contentType)
 	c.rw.Header().Set("Content-Length", strconv.Itoa(len(buf)))
+	c.rw.Header().Set("X-Content-Type-Options", "nosniff")
 	c.body = buf
 }
 

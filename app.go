@@ -10,29 +10,32 @@ import (
 	"sync/atomic"
 )
 
-// Checker a general health checker function, see [App.Check]
-type Checker func(ctx context.Context) (err error)
+// CheckerFunc health check function, see [App.Check]
+type CheckerFunc func(ctx context.Context) (err error)
+
+// HandlerFunc handler func with [Context] as argument
+type HandlerFunc func(ctx Context)
 
 // App the main interface of [summer]
 type App interface {
 	http.Handler
 
-	// Check register a component checker function with given name
+	// CheckFunc register a checker function with given name
 	//
-	// Invoking /debug/ready will evaluate all registered checkers
-	Check(name string, fn Checker)
+	// Invoking '/debug/ready' will evaluate all registered checker functions
+	CheckFunc(name string, fn CheckerFunc)
 
 	// HandleFunc register an action function with given path pattern
 	//
 	// This function is similar with [http.ServeMux.HandleFunc]
-	HandleFunc(pattern string, fn func(c Context))
+	HandleFunc(pattern string, fn HandlerFunc)
 }
 
 type app struct {
 	optConcurrency      int
 	optReadinessCascade int64
 
-	checkers map[string]Checker
+	checkers map[string]CheckerFunc
 
 	mux *http.ServeMux
 
@@ -44,13 +47,16 @@ type app struct {
 	readinessFailed int64
 }
 
-func (a *app) Check(name string, fn Checker) {
+func (a *app) CheckFunc(name string, fn CheckerFunc) {
 	a.checkers[name] = fn
 }
 
 func (a *app) executeCheckers(ctx context.Context) (r string, failed bool) {
 	sb := &strings.Builder{}
 	for k, fn := range a.checkers {
+		if sb.Len() > 0 {
+			sb.WriteString("\n")
+		}
 		sb.WriteString(k)
 		sb.WriteString(": ")
 		if err := fn(ctx); err == nil {
@@ -59,7 +65,6 @@ func (a *app) executeCheckers(ctx context.Context) (r string, failed bool) {
 			failed = true
 			sb.WriteString(err.Error())
 		}
-		sb.WriteString("\n")
 	}
 	r = sb.String()
 	if r == "" {
@@ -68,7 +73,7 @@ func (a *app) executeCheckers(ctx context.Context) (r string, failed bool) {
 	return
 }
 
-func (a *app) HandleFunc(pattern string, fn func(c Context)) {
+func (a *app) HandleFunc(pattern string, fn HandlerFunc) {
 	a.mux.Handle(
 		pattern,
 		otelhttp.WithRouteTag(
@@ -86,15 +91,15 @@ func (a *app) HandleFunc(pattern string, fn func(c Context)) {
 
 func (a *app) initialize() {
 	// checkers
-	a.checkers = map[string]Checker{}
+	a.checkers = map[string]CheckerFunc{}
 
 	// debug handler
 	m := &http.ServeMux{}
 	m.HandleFunc(DebugPathAlive, func(rw http.ResponseWriter, req *http.Request) {
 		if a.optReadinessCascade > 0 && atomic.LoadInt64(&a.readinessFailed) > a.optReadinessCascade {
-			http.Error(rw, "CASCADED", http.StatusInternalServerError)
+			respond(rw, "CASCADED", http.StatusInternalServerError)
 		} else {
-			http.Error(rw, "OK", http.StatusOK)
+			respond(rw, "OK", http.StatusOK)
 		}
 	})
 	m.HandleFunc(DebugPathReady, func(rw http.ResponseWriter, req *http.Request) {
@@ -106,7 +111,7 @@ func (a *app) initialize() {
 		} else {
 			atomic.StoreInt64(&a.readinessFailed, 0)
 		}
-		http.Error(rw, r, status)
+		respond(rw, r, status)
 	})
 	m.Handle(DebugPathMetrics, promhttp.Handler())
 	m.HandleFunc("/debug/pprof/", pprof.Index)

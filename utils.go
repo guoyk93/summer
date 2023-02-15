@@ -5,10 +5,38 @@ import (
 	"errors"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
+
+func extractClientIP(r *http.Request) (ip string) {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		for _, item := range strings.Split(xff, ",") {
+			item = strings.TrimSpace(item)
+			if item != "" && net.ParseIP(item) != nil {
+				ip = item
+			}
+		}
+	}
+
+	if ip == "" {
+		ip, _, _ = net.SplitHostPort(r.RemoteAddr)
+	}
+	return
+}
+
+func respond(rw http.ResponseWriter, s string, code int) {
+	buf := []byte(s)
+	rw.Header().Set("Content-Type", ContentTypeTextPlainUTF8)
+	rw.Header().Set("Content-Length", strconv.Itoa(len(buf)))
+	rw.Header().Set("X-Content-Type-Options", "nosniff")
+	rw.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	rw.WriteHeader(code)
+	_, _ = rw.Write(buf)
+}
 
 func flattenSlice[T any](s []T) any {
 	if len(s) == 1 {
@@ -17,9 +45,7 @@ func flattenSlice[T any](s []T) any {
 	return s
 }
 
-func flattenRequest(req *http.Request) (m map[string]any, err error) {
-	m = map[string]any{}
-
+func flattenRequest(m map[string]any, req *http.Request) (err error) {
 	// header
 	for k, vs := range req.Header {
 		k = "header_" + strings.ToLower(strings.ReplaceAll(k, "-", "_"))

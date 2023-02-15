@@ -17,6 +17,7 @@ func (e errorWithHTTPStatus) Unwrap() error {
 	return e.error
 }
 
+// ErrorWithHTTPStatus inject a http status code into an error
 func ErrorWithHTTPStatus(err error, code int) error {
 	return errorWithHTTPStatus{
 		error: err,
@@ -24,6 +25,7 @@ func ErrorWithHTTPStatus(err error, code int) error {
 	}
 }
 
+// HTTPStatusFromError extract http status code from an error
 func HTTPStatusFromError(err error) (code int) {
 	for {
 		if ec, ok := err.(interface {
