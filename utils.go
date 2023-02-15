@@ -12,23 +12,26 @@ import (
 	"strings"
 )
 
-func extractClientIP(r *http.Request) (ip string) {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+func extractClientIP(r *http.Request) (c string) {
+	xff := strings.Join(r.Header.Values("X-Forwarded-For"), ",")
+
+	if xff != "" {
 		for _, item := range strings.Split(xff, ",") {
 			item = strings.TrimSpace(item)
-			if item != "" && net.ParseIP(item) != nil {
-				ip = item
+			if ip := net.ParseIP(item); ip != nil && ip.IsGlobalUnicast() && !ip.IsPrivate() {
+				c = item
+				break
 			}
 		}
 	}
 
-	if ip == "" {
-		ip, _, _ = net.SplitHostPort(r.RemoteAddr)
+	if c == "" {
+		c, _, _ = net.SplitHostPort(r.RemoteAddr)
 	}
 	return
 }
 
-func respond(rw http.ResponseWriter, s string, code int) {
+func respondText(rw http.ResponseWriter, s string, code int) {
 	buf := []byte(s)
 	rw.Header().Set("Content-Type", ContentTypeTextPlainUTF8)
 	rw.Header().Set("Content-Length", strconv.Itoa(len(buf)))

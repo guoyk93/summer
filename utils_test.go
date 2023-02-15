@@ -27,9 +27,9 @@ func TestExtractClientIP(t *testing.T) {
 	require.Equal(t, "80.80.80.80", extractClientIP(req))
 }
 
-func TestRespond(t *testing.T) {
+func TestRespondText(t *testing.T) {
 	rw := httptest.NewRecorder()
-	respond(rw, "OK", http.StatusTeapot)
+	respondText(rw, "OK", http.StatusTeapot)
 	require.Equal(t, rw.Code, http.StatusTeapot)
 	require.Equal(t, rw.Body.String(), "OK")
 }

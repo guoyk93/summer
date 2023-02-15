@@ -97,9 +97,9 @@ func (a *app) initialize() {
 	m := &http.ServeMux{}
 	m.HandleFunc(DebugPathAlive, func(rw http.ResponseWriter, req *http.Request) {
 		if a.optReadinessCascade > 0 && atomic.LoadInt64(&a.readinessFailed) > a.optReadinessCascade {
-			respond(rw, "CASCADED", http.StatusInternalServerError)
+			respondText(rw, "CASCADED", http.StatusInternalServerError)
 		} else {
-			respond(rw, "OK", http.StatusOK)
+			respondText(rw, "OK", http.StatusOK)
 		}
 	})
 	m.HandleFunc(DebugPathReady, func(rw http.ResponseWriter, req *http.Request) {
@@ -111,7 +111,7 @@ func (a *app) initialize() {
 		} else {
 			atomic.StoreInt64(&a.readinessFailed, 0)
 		}
-		respond(rw, r, status)
+		respondText(rw, r, status)
 	})
 	m.Handle(DebugPathMetrics, promhttp.Handler())
 	m.HandleFunc("/debug/pprof/", pprof.Index)
