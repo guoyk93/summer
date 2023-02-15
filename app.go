@@ -169,7 +169,10 @@ func New[T Context](cf ContextFactory[T], opts ...Option) App[T] {
 	return a
 }
 
+// BasicApp basic app is an [App] using vanilla [Context]
+type BasicApp = App[Context]
+
 // Basic create an [App] with vanilla [Context] and additional [Option]
-func Basic(opts ...Option) App[Context] {
-	return New(CreateContext, opts...)
+func Basic(opts ...Option) BasicApp {
+	return New(BasicContext, opts...)
 }

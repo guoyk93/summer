@@ -140,11 +140,11 @@ func (c *basicContext) Perform() {
 	c.sendOnce.Do(c.send)
 }
 
-// ContextFactory factory function for creating a extended [Context]
+// ContextFactory factory function for creating an extended [Context]
 type ContextFactory[T Context] func(rw http.ResponseWriter, req *http.Request) T
 
-// CreateContext context factory creating a basic [Context] implementation
-func CreateContext(rw http.ResponseWriter, req *http.Request) Context {
+// BasicContext context factory creating a basic [Context] implementation
+func BasicContext(rw http.ResponseWriter, req *http.Request) Context {
 	return &basicContext{
 		req:      req,
 		rw:       rw,
@@ -153,3 +153,7 @@ func CreateContext(rw http.ResponseWriter, req *http.Request) Context {
 		sendOnce: &sync.Once{},
 	}
 }
+
+var (
+	_ ContextFactory[Context] = BasicContext
+)
