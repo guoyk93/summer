@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 )
 
 // Context context of a incoming request and corresponding response
 type Context interface {
+	// Context extend the [context.Context] interface by proxying to [http.Request.Context]
 	context.Context
 
 	// Req returns the underlying *http.Request
@@ -49,8 +51,6 @@ type Context interface {
 }
 
 type summerContext struct {
-	context.Context
-
 	req *http.Request
 	rw  http.ResponseWriter
 
@@ -61,6 +61,22 @@ type summerContext struct {
 
 	recvOnce *sync.Once
 	sendOnce *sync.Once
+}
+
+func (c *summerContext) Deadline() (deadline time.Time, ok bool) {
+	return c.req.Context().Deadline()
+}
+
+func (c *summerContext) Done() <-chan struct{} {
+	return c.req.Context().Done()
+}
+
+func (c *summerContext) Err() error {
+	return c.req.Context().Err()
+}
+
+func (c *summerContext) Value(key any) any {
+	return c.req.Context().Value(key)
 }
 
 func (c *summerContext) Req() *http.Request {
@@ -132,7 +148,6 @@ func (c *summerContext) Perform() {
 
 func newContext(rw http.ResponseWriter, req *http.Request) *summerContext {
 	return &summerContext{
-		Context:  req.Context(),
 		req:      req,
 		rw:       rw,
 		code:     http.StatusOK,
