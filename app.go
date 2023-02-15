@@ -10,40 +10,27 @@ import (
 	"sync/atomic"
 )
 
-// Checker a general health checker func, check App#Check()
+// Checker a general health checker function, see [App.Check]
 type Checker func(ctx context.Context) (err error)
-
-// Options options to create a [App]
-type Options struct {
-	// Concurrency maximum concurrent request in-flight
-	Concurrency int
-	// CascadeReadiness maximum count of continuous failed readiness checks, after that, liveness probe will fail, triggering pod restart
-	CascadeReadiness int
-}
-
-func (opts Options) sanitize() Options {
-	if opts.Concurrency <= 0 {
-		opts.Concurrency = 128
-	}
-	if opts.CascadeReadiness <= 0 {
-		opts.CascadeReadiness = 5
-	}
-	return opts
-}
 
 // App the main interface of [summer]
 type App interface {
 	http.Handler
 
-	// Check register a service checker with given name
+	// Check register a component checker function with given name
+	//
+	// Invoking /debug/ready will evaluate all registered checkers
 	Check(name string, fn Checker)
 
-	// Handle register an action with given path pattern
-	Handle(pattern string, fn func(c Context))
+	// HandleFunc register an action function with given path pattern
+	//
+	// This function is similar with [http.ServeMux.HandleFunc]
+	HandleFunc(pattern string, fn func(c Context))
 }
 
 type app struct {
-	opts Options
+	optConcurrency      int
+	optReadinessCascade int64
 
 	checkers map[string]Checker
 
@@ -81,7 +68,7 @@ func (a *app) executeCheckers(ctx context.Context) (r string, failed bool) {
 	return
 }
 
-func (a *app) Handle(pattern string, fn func(c Context)) {
+func (a *app) HandleFunc(pattern string, fn func(c Context)) {
 	a.mux.Handle(
 		pattern,
 		otelhttp.WithRouteTag(
@@ -104,7 +91,7 @@ func (a *app) initialize() {
 	// debug handler
 	m := &http.ServeMux{}
 	m.HandleFunc(DebugPathAlive, func(rw http.ResponseWriter, req *http.Request) {
-		if a.readinessFailed > int64(a.opts.CascadeReadiness) {
+		if a.optReadinessCascade > 0 && atomic.LoadInt64(&a.readinessFailed) > a.optReadinessCascade {
 			http.Error(rw, "CASCADED", http.StatusInternalServerError)
 		} else {
 			http.Error(rw, "OK", http.StatusOK)
@@ -134,9 +121,11 @@ func (a *app) initialize() {
 	a.h = otelhttp.NewHandler(a.mux, "http")
 
 	// concurrency control
-	a.cc = make(chan struct{}, a.opts.Concurrency)
-	for i := 0; i < a.opts.Concurrency; i++ {
-		a.cc <- struct{}{}
+	if a.optConcurrency > 0 {
+		a.cc = make(chan struct{}, a.optConcurrency)
+		for i := 0; i < a.optConcurrency; i++ {
+			a.cc <- struct{}{}
+		}
 	}
 }
 
@@ -147,18 +136,25 @@ func (a *app) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	// concurrency control
-	<-a.cc
-	defer func() {
-		a.cc <- struct{}{}
-	}()
+	if a.cc != nil {
+		<-a.cc
+		defer func() {
+			a.cc <- struct{}{}
+		}()
+	}
 
 	a.h.ServeHTTP(rw, req)
 }
 
-// New create a [App]
-func New(opts Options) App {
-	opts = opts.sanitize()
-	a := &app{opts: opts}
+// New create an [App] with optional [Option]
+func New(opts ...Option) App {
+	a := &app{
+		optReadinessCascade: 5,
+		optConcurrency:      128,
+	}
+	for _, opt := range opts {
+		opt(a)
+	}
 	a.initialize()
 	return a
 }
