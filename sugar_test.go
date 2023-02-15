@@ -10,7 +10,7 @@ import (
 func TestBind(t *testing.T) {
 	var hello string
 
-	a := New()
+	a := New(NewContext)
 	a.HandleFunc("/test", func(c Context) {
 		args := Bind[struct {
 			Hello string `json:"query_hello"`

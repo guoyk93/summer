@@ -1,14 +1,19 @@
 package summer
 
+type options struct {
+	concurrency      int
+	readinessCascade int64
+}
+
 // Option a function configuring [App]
-type Option func(a *app)
+type Option func(opts *options)
 
 // WithConcurrency set maximum concurrent requests of [App].
 //
 // A value <= 0 means unlimited
 func WithConcurrency(c int) Option {
-	return func(a *app) {
-		a.optConcurrency = c
+	return func(opts *options) {
+		opts.concurrency = c
 	}
 }
 
@@ -18,7 +23,7 @@ func WithConcurrency(c int) Option {
 //
 // A value <= 0 means disabled
 func WithReadinessCascade(rc int) Option {
-	return func(a *app) {
-		a.optReadinessCascade = int64(rc)
+	return func(opts *options) {
+		opts.readinessCascade = int64(rc)
 	}
 }

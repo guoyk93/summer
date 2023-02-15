@@ -10,7 +10,7 @@ import (
 func TestContext(t *testing.T) {
 	req := httptest.NewRequest("GET", "https://example.com/get?aaa=bbb", nil)
 	rw := httptest.NewRecorder()
-	ctx := newContext(rw, req)
+	ctx := NewContext(rw, req)
 
 	func() {
 		defer ctx.Perform()
@@ -40,7 +40,7 @@ func TestContext(t *testing.T) {
 func TestContextPanic(t *testing.T) {
 	req := httptest.NewRequest("GET", "https://example.com/get?aaa=bbb", nil)
 	rw := httptest.NewRecorder()
-	ctx := newContext(rw, req)
+	ctx := NewContext(rw, req)
 
 	func() {
 		defer ctx.Perform()

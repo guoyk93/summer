@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Context context of a incoming request and corresponding response
+// Context the most basic context of a incoming request and corresponding response
 type Context interface {
 	// Context extend the [context.Context] interface by proxying to [http.Request.Context]
 	context.Context
@@ -20,9 +20,6 @@ type Context interface {
 	Req() *http.Request
 	// Res returns the underlying http.ResponseWriter
 	Res() http.ResponseWriter
-
-	// ClientIP client ip calculated from X-Forwarded-For header
-	ClientIP() string
 
 	// Bind unmarshal the request data into any struct with json tags
 	//
@@ -105,13 +102,10 @@ func (c *summerContext) Bind(data interface{}) {
 	rg.Must0(json.Unmarshal(c.buf, data))
 }
 
-func (c *summerContext) ClientIP() string {
-	return extractClientIP(c.req)
-}
-
 func (c *summerContext) Code(code int) {
 	c.code = code
 }
+
 func (c *summerContext) Body(contentType string, buf []byte) {
 	c.rw.Header().Set("Content-Type", contentType)
 	c.rw.Header().Set("Content-Length", strconv.Itoa(len(buf)))
@@ -146,7 +140,11 @@ func (c *summerContext) Perform() {
 	c.sendOnce.Do(c.send)
 }
 
-func newContext(rw http.ResponseWriter, req *http.Request) *summerContext {
+// ContextFactory factory function for creating a extended [Context]
+type ContextFactory[T Context] func(rw http.ResponseWriter, req *http.Request) T
+
+// NewContext context factory creating a basic [Context]
+func NewContext(rw http.ResponseWriter, req *http.Request) Context {
 	return &summerContext{
 		req:      req,
 		rw:       rw,

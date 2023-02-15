@@ -8,25 +8,6 @@ import (
 	"testing"
 )
 
-func TestExtractClientIP(t *testing.T) {
-	req := httptest.NewRequest("GET", "https://example.com", nil)
-	req.Header.Set("X-Forwarded-For", "10.10.10.10, 80.12.23.44")
-
-	require.Equal(t, "80.12.23.44", extractClientIP(req))
-
-	req = httptest.NewRequest("GET", "https://example.com", nil)
-	req.RemoteAddr = "80.80.80.80:14443"
-	req.Header.Set("X-Forwarded-For", "10.10.10.10, 80.12.23.44")
-
-	require.Equal(t, "80.12.23.44", extractClientIP(req))
-
-	req = httptest.NewRequest("GET", "https://example.com", nil)
-	req.RemoteAddr = "80.80.80.80:14443"
-	req.Header.Set("X-Forwarded-For", ", ")
-
-	require.Equal(t, "80.80.80.80", extractClientIP(req))
-}
-
 func TestRespondText(t *testing.T) {
 	rw := httptest.NewRecorder()
 	respondText(rw, "OK", http.StatusTeapot)

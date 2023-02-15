@@ -14,10 +14,10 @@ import (
 type CheckerFunc func(ctx context.Context) (err error)
 
 // HandlerFunc handler func with [Context] as argument
-type HandlerFunc func(ctx Context)
+type HandlerFunc[T Context] func(ctx T)
 
 // App the main interface of [summer]
-type App interface {
+type App[T Context] interface {
 	http.Handler
 
 	// CheckFunc register a checker function with given name
@@ -28,12 +28,13 @@ type App interface {
 	// HandleFunc register an action function with given path pattern
 	//
 	// This function is similar with [http.ServeMux.HandleFunc]
-	HandleFunc(pattern string, fn HandlerFunc)
+	HandleFunc(pattern string, fn HandlerFunc[T])
 }
 
-type app struct {
-	optConcurrency      int
-	optReadinessCascade int64
+type app[T Context] struct {
+	contextFactory ContextFactory[T]
+
+	opts options
 
 	checkers map[string]CheckerFunc
 
@@ -47,11 +48,11 @@ type app struct {
 	readinessFailed int64
 }
 
-func (a *app) CheckFunc(name string, fn CheckerFunc) {
+func (a *app[T]) CheckFunc(name string, fn CheckerFunc) {
 	a.checkers[name] = fn
 }
 
-func (a *app) executeCheckers(ctx context.Context) (r string, failed bool) {
+func (a *app[T]) executeCheckers(ctx context.Context) (r string, failed bool) {
 	sb := &strings.Builder{}
 	for k, fn := range a.checkers {
 		if sb.Len() > 0 {
@@ -73,13 +74,13 @@ func (a *app) executeCheckers(ctx context.Context) (r string, failed bool) {
 	return
 }
 
-func (a *app) HandleFunc(pattern string, fn HandlerFunc) {
+func (a *app[T]) HandleFunc(pattern string, fn HandlerFunc[T]) {
 	a.mux.Handle(
 		pattern,
 		otelhttp.WithRouteTag(
 			pattern,
 			http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-				c := newContext(rw, req)
+				c := a.contextFactory(rw, req)
 				func() {
 					defer c.Perform()
 					fn(c)
@@ -89,14 +90,14 @@ func (a *app) HandleFunc(pattern string, fn HandlerFunc) {
 	)
 }
 
-func (a *app) initialize() {
+func (a *app[T]) initialize() {
 	// checkers
 	a.checkers = map[string]CheckerFunc{}
 
 	// debug handler
 	m := &http.ServeMux{}
 	m.HandleFunc(DebugPathAlive, func(rw http.ResponseWriter, req *http.Request) {
-		if a.optReadinessCascade > 0 && atomic.LoadInt64(&a.readinessFailed) > a.optReadinessCascade {
+		if a.opts.readinessCascade > 0 && atomic.LoadInt64(&a.readinessFailed) > a.opts.readinessCascade {
 			respondText(rw, "CASCADED", http.StatusInternalServerError)
 		} else {
 			respondText(rw, "OK", http.StatusOK)
@@ -126,15 +127,15 @@ func (a *app) initialize() {
 	a.h = otelhttp.NewHandler(a.mux, "http")
 
 	// concurrency control
-	if a.optConcurrency > 0 {
-		a.cc = make(chan struct{}, a.optConcurrency)
-		for i := 0; i < a.optConcurrency; i++ {
+	if a.opts.concurrency > 0 {
+		a.cc = make(chan struct{}, a.opts.concurrency)
+		for i := 0; i < a.opts.concurrency; i++ {
 			a.cc <- struct{}{}
 		}
 	}
 }
 
-func (a *app) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+func (a *app[T]) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if strings.HasPrefix(req.URL.Path, DebugPathPrefix) {
 		a.debug.ServeHTTP(rw, req)
 		return
@@ -152,13 +153,17 @@ func (a *app) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 }
 
 // New create an [App] with optional [Option]
-func New(opts ...Option) App {
-	a := &app{
-		optReadinessCascade: 5,
-		optConcurrency:      128,
+func New[T Context](cf ContextFactory[T], opts ...Option) App[T] {
+	a := &app[T]{
+		contextFactory: cf,
+
+		opts: options{
+			concurrency:      128,
+			readinessCascade: 5,
+		},
 	}
 	for _, opt := range opts {
-		opt(a)
+		opt(&a.opts)
 	}
 	a.initialize()
 	return a

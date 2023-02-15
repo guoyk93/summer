@@ -5,31 +5,11 @@ import (
 	"errors"
 	"io"
 	"mime"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 )
-
-func extractClientIP(r *http.Request) (c string) {
-	xff := strings.Join(r.Header.Values("X-Forwarded-For"), ",")
-
-	if xff != "" {
-		for _, item := range strings.Split(xff, ",") {
-			item = strings.TrimSpace(item)
-			if ip := net.ParseIP(item); ip != nil && ip.IsGlobalUnicast() && !ip.IsPrivate() {
-				c = item
-				break
-			}
-		}
-	}
-
-	if c == "" {
-		c, _, _ = net.SplitHostPort(r.RemoteAddr)
-	}
-	return
-}
 
 func respondText(rw http.ResponseWriter, s string, code int) {
 	buf := []byte(s)

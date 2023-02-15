@@ -12,7 +12,7 @@ import (
 func TestApp(t *testing.T) {
 	bad := true
 
-	a := New(WithReadinessCascade(1), WithConcurrency(1))
+	a := New(NewContext, WithReadinessCascade(1), WithConcurrency(1))
 	a.CheckFunc("test-1", func(ctx context.Context) (err error) {
 		if bad {
 			return errors.New("test-failed")
