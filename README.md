@@ -2,6 +2,10 @@
 
 A Minimalist Mesh-Native Microservice Framework for Golang
 
+## Core Concept
+
+By using generics, `summer` allows you to use the basic `summar.Context`, or extend your own `Context` type, without changing programming paradigm.
+
 ## Features
 
 * Support `opentelemetry-go`

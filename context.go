@@ -47,7 +47,7 @@ type Context interface {
 	Perform()
 }
 
-type summerContext struct {
+type basicContext struct {
 	req *http.Request
 	rw  http.ResponseWriter
 
@@ -60,31 +60,31 @@ type summerContext struct {
 	sendOnce *sync.Once
 }
 
-func (c *summerContext) Deadline() (deadline time.Time, ok bool) {
+func (c *basicContext) Deadline() (deadline time.Time, ok bool) {
 	return c.req.Context().Deadline()
 }
 
-func (c *summerContext) Done() <-chan struct{} {
+func (c *basicContext) Done() <-chan struct{} {
 	return c.req.Context().Done()
 }
 
-func (c *summerContext) Err() error {
+func (c *basicContext) Err() error {
 	return c.req.Context().Err()
 }
 
-func (c *summerContext) Value(key any) any {
+func (c *basicContext) Value(key any) any {
 	return c.req.Context().Value(key)
 }
 
-func (c *summerContext) Req() *http.Request {
+func (c *basicContext) Req() *http.Request {
 	return c.req
 }
 
-func (c *summerContext) Res() http.ResponseWriter {
+func (c *basicContext) Res() http.ResponseWriter {
 	return c.rw
 }
 
-func (c *summerContext) receive() {
+func (c *basicContext) receive() {
 	var m = map[string]any{}
 	if err := flattenRequest(m, c.req); err != nil {
 		panic(ErrorWithHTTPStatus(err, http.StatusBadRequest))
@@ -92,37 +92,37 @@ func (c *summerContext) receive() {
 	c.buf = rg.Must(json.Marshal(m))
 }
 
-func (c *summerContext) send() {
+func (c *basicContext) send() {
 	c.rw.WriteHeader(c.code)
 	_, _ = c.rw.Write(c.body)
 }
 
-func (c *summerContext) Bind(data interface{}) {
+func (c *basicContext) Bind(data interface{}) {
 	c.recvOnce.Do(c.receive)
 	rg.Must0(json.Unmarshal(c.buf, data))
 }
 
-func (c *summerContext) Code(code int) {
+func (c *basicContext) Code(code int) {
 	c.code = code
 }
 
-func (c *summerContext) Body(contentType string, buf []byte) {
+func (c *basicContext) Body(contentType string, buf []byte) {
 	c.rw.Header().Set("Content-Type", contentType)
 	c.rw.Header().Set("Content-Length", strconv.Itoa(len(buf)))
 	c.rw.Header().Set("X-Content-Type-Options", "nosniff")
 	c.body = buf
 }
 
-func (c *summerContext) Text(s string) {
+func (c *basicContext) Text(s string) {
 	c.Body(ContentTypeTextPlainUTF8, []byte(s))
 }
 
-func (c *summerContext) JSON(data interface{}) {
+func (c *basicContext) JSON(data interface{}) {
 	buf := rg.Must(json.Marshal(data))
 	c.Body(ContentTypeApplicationJSONUTF8, buf)
 }
 
-func (c *summerContext) Perform() {
+func (c *basicContext) Perform() {
 	if r := recover(); r != nil {
 		var (
 			message string
@@ -143,9 +143,9 @@ func (c *summerContext) Perform() {
 // ContextFactory factory function for creating a extended [Context]
 type ContextFactory[T Context] func(rw http.ResponseWriter, req *http.Request) T
 
-// NewContext context factory creating a basic [Context]
-func NewContext(rw http.ResponseWriter, req *http.Request) Context {
-	return &summerContext{
+// CreateContext context factory creating a basic [Context] implementation
+func CreateContext(rw http.ResponseWriter, req *http.Request) Context {
+	return &basicContext{
 		req:      req,
 		rw:       rw,
 		code:     http.StatusOK,

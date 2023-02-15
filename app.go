@@ -152,7 +152,7 @@ func (a *app[T]) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	a.h.ServeHTTP(rw, req)
 }
 
-// New create an [App] with optional [Option]
+// New create an [App] with a custom [ContextFactory] and additional [Option]
 func New[T Context](cf ContextFactory[T], opts ...Option) App[T] {
 	a := &app[T]{
 		contextFactory: cf,
@@ -167,4 +167,9 @@ func New[T Context](cf ContextFactory[T], opts ...Option) App[T] {
 	}
 	a.initialize()
 	return a
+}
+
+// Basic create an [App] with vanilla [Context] and additional [Option]
+func Basic(opts ...Option) App[Context] {
+	return New(CreateContext, opts...)
 }
