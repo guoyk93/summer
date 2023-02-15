@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/guoyk93/rg"
+	"github.com/guoyk93/summer/pkg/clientip"
 	"net/http"
 	"strconv"
 	"sync"
@@ -13,16 +14,35 @@ import (
 type Context interface {
 	context.Context
 
+	// Req returns the underlying *http.Request
 	Req() *http.Request
+	// Res returns the underlying http.ResponseWriter
 	Res() http.ResponseWriter
 
+	// ClientIP client ip calculated from X-Forwarded-For header
+	ClientIP() string
+
+	// Bind unmarshal the request into struct with json tags
+	//
+	// HTTP header is prefixed with "header_"
+	// HTTP query is prefixed with "query_"
+	// both JSON and Form are supported
 	Bind(data interface{})
 
+	// Code set the response code, can be called multiple times
 	Code(code int)
+
+	// Body set the response body with content type, can be called multiple times
 	Body(contentType string, buf []byte)
+
+	// Text set the response body to plain text
 	Text(s string)
+
+	// JSON set the response body to json
 	JSON(data interface{})
 
+	// Perform actually perform the response
+	// it is suggested to use in defer, recover() is included to recover from any panics
 	Perform()
 }
 
@@ -65,6 +85,10 @@ func (c *summerContext) send() {
 func (c *summerContext) Bind(data interface{}) {
 	c.recvOnce.Do(c.receive)
 	rg.Must0(json.Unmarshal(c.buf, data))
+}
+
+func (c *summerContext) ClientIP() string {
+	return clientip.DefaultExtractor(c.req)
 }
 
 func (c *summerContext) Code(code int) {
