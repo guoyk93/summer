@@ -10,14 +10,18 @@ import (
 	"sync/atomic"
 )
 
+// Checker a general health checker func, check App#Check()
 type Checker func(ctx context.Context) (err error)
 
+// Options options to create a [App]
 type Options struct {
-	Concurrency      int
+	// Concurrency maximum concurrent request in-flight
+	Concurrency int
+	// CascadeReadiness maximum count of continuous failed readiness checks, after that, liveness probe will fail, triggering pod restart
 	CascadeReadiness int
 }
 
-func (opts Options) Sanitize() Options {
+func (opts Options) sanitize() Options {
 	if opts.Concurrency <= 0 {
 		opts.Concurrency = 128
 	}
@@ -27,11 +31,14 @@ func (opts Options) Sanitize() Options {
 	return opts
 }
 
+// App the main interface of [summer]
 type App interface {
 	http.Handler
 
+	// Check register a service checker with given name
 	Check(name string, fn Checker)
 
+	// Handle register an action with given path pattern
 	Handle(pattern string, fn func(c Context))
 }
 
@@ -148,8 +155,9 @@ func (a *app) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	a.h.ServeHTTP(rw, req)
 }
 
+// New create a [App]
 func New(opts Options) App {
-	opts = opts.Sanitize()
+	opts = opts.sanitize()
 	a := &app{opts: opts}
 	a.initialize()
 	return a
