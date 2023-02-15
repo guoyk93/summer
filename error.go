@@ -1,6 +1,7 @@
 package summer
 
 import (
+	"errors"
 	"net/http"
 )
 
@@ -40,4 +41,8 @@ func HTTPStatusFromError(err error) (code int) {
 		}
 	}
 	return http.StatusInternalServerError
+}
+
+func Panic(s string, code int) {
+	panic(ErrorWithHTTPStatus(errors.New(s), code))
 }
