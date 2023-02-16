@@ -5,14 +5,24 @@ import (
 	"testing"
 )
 
-func TestWithConcurrency(t *testing.T) {
+func TestOptions(t *testing.T) {
 	opts := options{}
 	WithConcurrency(2)(&opts)
 	require.Equal(t, 2, opts.concurrency)
-}
 
-func TestWithReadinessCascade(t *testing.T) {
-	opts := options{}
+	opts = options{}
 	WithReadinessCascade(2)(&opts)
 	require.Equal(t, int64(2), opts.readinessCascade)
+
+	opts = options{}
+	WithLivenessPath("/aaa")(&opts)
+	require.Equal(t, "/aaa", opts.livenessPath)
+
+	opts = options{}
+	WithReadinessPath("/aaa")(&opts)
+	require.Equal(t, "/aaa", opts.readinessPath)
+
+	opts = options{}
+	WithMetricsPath("/aaa")(&opts)
+	require.Equal(t, "/aaa", opts.metricsPath)
 }

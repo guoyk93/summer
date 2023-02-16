@@ -6,6 +6,9 @@ import (
 	"sync"
 )
 
+// PropagateFunc propagation function for component
+type PropagateFunc func(ctx context.Context, c Context) context.Context
+
 // LifecycleFunc lifecycle function for component
 type LifecycleFunc func(ctx context.Context) (err error)
 
@@ -20,6 +23,9 @@ type Registry interface {
 
 	// Check run all checks
 	Check(ctx context.Context, fn func(name string, err error))
+
+	// Inject execute all propagate funcs with [Context]
+	Inject(c Context)
 
 	// Shutdown shutdown all registered components
 	Shutdown(ctx context.Context) (err error)
@@ -38,6 +44,9 @@ type Registration interface {
 
 	// Shutdown set shutdown function
 	Shutdown(fn LifecycleFunc) Registration
+
+	// Propagate set propagate function
+	Propagate(fn PropagateFunc) Registration
 }
 
 type registration struct {
@@ -45,6 +54,8 @@ type registration struct {
 	startup  LifecycleFunc
 	check    LifecycleFunc
 	shutdown LifecycleFunc
+
+	propagate PropagateFunc
 }
 
 func (r *registration) Name() string {
@@ -63,6 +74,11 @@ func (r *registration) Check(fn LifecycleFunc) Registration {
 
 func (r *registration) Shutdown(fn LifecycleFunc) Registration {
 	r.shutdown = fn
+	return r
+}
+
+func (r *registration) Propagate(fn PropagateFunc) Registration {
+	r.propagate = fn
 	return r
 }
 
@@ -129,6 +145,19 @@ func (a *registry) Check(ctx context.Context, fn func(name string, err error)) {
 		}
 	}
 
+	return
+}
+
+func (a *registry) Inject(c Context) {
+	c.Inject(func(ctx context.Context) context.Context {
+		for _, item := range a.regs {
+			if item.propagate == nil {
+				continue
+			}
+			ctx = item.propagate(ctx, c)
+		}
+		return ctx
+	})
 	return
 }
 

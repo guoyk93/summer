@@ -53,6 +53,7 @@ func (a *app[T]) HandleFunc(pattern string, fn HandlerFunc[T]) {
 				c := a.cf(rw, req)
 				func() {
 					defer c.Perform()
+					a.Inject(c)
 					fn(c)
 				}()
 			}),
@@ -145,15 +146,13 @@ func New[T Context](cf ContextFactory[T], opts ...Option) App[T] {
 
 	a.hMain = otelhttp.NewHandler(a.mux, "http")
 	a.hProm = promhttp.Handler()
-	{
-		m := &http.ServeMux{}
-		m.HandleFunc("/debug/pprof/", pprof.Index)
-		m.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-		m.HandleFunc("/debug/pprof/profile", pprof.Profile)
-		m.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-		m.HandleFunc("/debug/pprof/trace", pprof.Trace)
-		a.hProf = m
-	}
+	m := &http.ServeMux{}
+	m.HandleFunc("/debug/pprof/", pprof.Index)
+	m.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	m.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	m.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	m.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	a.hProf = m
 
 	// concurrency control
 	if a.opts.concurrency > 0 {
@@ -165,10 +164,7 @@ func New[T Context](cf ContextFactory[T], opts ...Option) App[T] {
 	return a
 }
 
-// BasicApp basic app is an [App] using vanilla [Context]
-type BasicApp = App[Context]
-
 // Basic create an [App] with vanilla [Context] and additional [Option]
-func Basic(opts ...Option) BasicApp {
+func Basic(opts ...Option) App[Context] {
 	return New(BasicContext, opts...)
 }

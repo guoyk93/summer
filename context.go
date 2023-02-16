@@ -35,6 +35,9 @@ type Context interface {
 	// Context extend the [context.Context] interface by proxying to [http.Request.Context]
 	context.Context
 
+	// Inject inject underlying [context.Context]
+	Inject(fn func(ctx context.Context) context.Context)
+
 	// Req returns the underlying *http.Request
 	Req() *http.Request
 	// Res returns the underlying http.ResponseWriter
@@ -93,6 +96,14 @@ func (c *basicContext) Err() error {
 
 func (c *basicContext) Value(key any) any {
 	return c.req.Context().Value(key)
+}
+
+func (c *basicContext) Inject(fn func(ctx context.Context) context.Context) {
+	ctx := c.req.Context()
+	neo := fn(ctx)
+	if neo != nil && neo != ctx {
+		c.req = c.req.WithContext(neo)
+	}
 }
 
 func (c *basicContext) Req() *http.Request {
