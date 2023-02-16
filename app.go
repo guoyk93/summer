@@ -125,15 +125,8 @@ func (a *app[T]) initialize() {
 
 func (a *app[T]) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// alive, ready, metrics
-	switch req.URL.Path {
-	case a.opts.livenessPath:
-		if a.opts.readinessCascade > 0 && atomic.LoadInt64(&a.readinessFailed) > a.opts.readinessCascade {
-			respondText(rw, "CASCADED", http.StatusInternalServerError)
-		} else {
-			respondText(rw, "OK", http.StatusOK)
-		}
-		return
-	case a.opts.readinessPath:
+	if req.URL.Path == a.opts.readinessPath {
+		// readiness first, works when readinessPath == livenessPath
 		r, failed := a.executeCheckers(req.Context())
 		status := http.StatusOK
 		if failed {
@@ -142,9 +135,16 @@ func (a *app[T]) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		} else {
 			atomic.StoreInt64(&a.readinessFailed, 0)
 		}
-		respondText(rw, r, status)
+		respondInternal(rw, r, status)
 		return
-	case a.opts.metricsPath:
+	} else if req.URL.Path == a.opts.livenessPath {
+		if a.opts.readinessCascade > 0 && atomic.LoadInt64(&a.readinessFailed) > a.opts.readinessCascade {
+			respondInternal(rw, "CASCADED", http.StatusInternalServerError)
+		} else {
+			respondInternal(rw, "OK", http.StatusOK)
+		}
+		return
+	} else if req.URL.Path == a.opts.metricsPath {
 		a.ph.ServeHTTP(rw, req)
 		return
 	}

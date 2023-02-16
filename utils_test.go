@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-func TestRespondText(t *testing.T) {
+func TestRespondInternal(t *testing.T) {
 	rw := httptest.NewRecorder()
-	respondText(rw, "OK", http.StatusTeapot)
+	respondInternal(rw, "OK", http.StatusTeapot)
 	require.Equal(t, rw.Code, http.StatusTeapot)
 	require.Equal(t, rw.Body.String(), "OK")
 }
