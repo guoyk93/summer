@@ -35,7 +35,7 @@ func TestHalt(t *testing.T) {
 
 		HaltString(
 			"test",
-			BadRequest(),
+			HaltWithBadRequest(),
 			HaltWithExtras(map[string]any{
 				"ccc": "ddd",
 				"eee": "fff",

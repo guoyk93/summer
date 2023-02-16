@@ -19,8 +19,8 @@ func HaltWithStatusCode(code int) HaltOption {
 	}
 }
 
-// BadRequest alias to [HaltWithStatusCode] with [http.StatusBadRequest]
-func BadRequest() HaltOption {
+// HaltWithBadRequest alias to [HaltWithStatusCode] with [http.StatusBadRequest]
+func HaltWithBadRequest() HaltOption {
 	return HaltWithStatusCode(http.StatusBadRequest)
 }
 
