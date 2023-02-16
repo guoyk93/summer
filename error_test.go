@@ -35,7 +35,7 @@ func TestHalt(t *testing.T) {
 
 		HaltString(
 			"test",
-			HaltWithStatusCode(http.StatusTeapot),
+			BadRequest(),
 			HaltWithExtras(map[string]any{
 				"ccc": "ddd",
 				"eee": "fff",
@@ -45,7 +45,7 @@ func TestHalt(t *testing.T) {
 		)
 	}()
 	m = BodyFromError(err)
-	require.Equal(t, http.StatusTeapot, StatusCodeFromError(err))
+	require.Equal(t, http.StatusBadRequest, StatusCodeFromError(err))
 	require.Equal(t, map[string]any{"message": "test2", "aaa": "bbb", "ccc": "ddd", "eee": "fff"}, m)
 }
 

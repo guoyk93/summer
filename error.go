@@ -19,6 +19,11 @@ func HaltWithStatusCode(code int) HaltOption {
 	}
 }
 
+// BadRequest alias to [HaltWithStatusCode] with [http.StatusBadRequest]
+func BadRequest() HaltOption {
+	return HaltWithStatusCode(http.StatusBadRequest)
+}
+
 // HaltWithMessage a [HaltOption] overriding message key
 func HaltWithMessage(m string) HaltOption {
 	return HaltWithExtra(HaltExtraKeyMessage, m)
