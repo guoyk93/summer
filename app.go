@@ -2,16 +2,18 @@ package summer
 
 import (
 	"context"
+	"errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"net/http"
 	"net/http/pprof"
 	"strings"
+	"sync"
 	"sync/atomic"
 )
 
-// CheckerFunc health check function, see [App.Check]
-type CheckerFunc func(ctx context.Context) (err error)
+// LifecycleFunc lifecycle function for component
+type LifecycleFunc func(ctx context.Context) (err error)
 
 // HandlerFunc handler func with [Context] as argument
 type HandlerFunc[T Context] func(ctx T)
@@ -20,28 +22,44 @@ type HandlerFunc[T Context] func(ctx T)
 type App[T Context] interface {
 	http.Handler
 
-	// CheckFunc register a checker function with given name
+	// Component register a component
 	//
-	// Invoking '/debug/ready' will evaluate all registered checker functions
-	CheckFunc(name string, fn CheckerFunc)
+	// In order of `startup`, `check` and `shutdown`
+	Component(name string, fns ...LifecycleFunc)
 
 	// HandleFunc register an action function with given path pattern
 	//
 	// This function is similar with [http.ServeMux.HandleFunc]
 	HandleFunc(pattern string, fn HandlerFunc[T])
+
+	// Startup start all registered components
+	Startup(ctx context.Context) (err error)
+
+	// Shutdown shutdown all registered components
+	Shutdown(ctx context.Context) (err error)
+}
+
+type componentRegistration struct {
+	name     string
+	startup  LifecycleFunc
+	check    LifecycleFunc
+	shutdown LifecycleFunc
 }
 
 type app[T Context] struct {
-	contextFactory ContextFactory[T]
-
+	// before init
+	mu   sync.Locker
+	cf   ContextFactory[T]
 	opts options
 
-	checkers map[string]CheckerFunc
+	// after init
+	regs []*componentRegistration
+	init []*componentRegistration
 
 	mux *http.ServeMux
 
-	h  http.Handler
-	ph http.Handler
+	h http.Handler
+	p http.Handler
 
 	pprof http.Handler
 
@@ -50,28 +68,57 @@ type app[T Context] struct {
 	readinessFailed int64
 }
 
-func (a *app[T]) CheckFunc(name string, fn CheckerFunc) {
-	a.checkers[name] = fn
+func (a *app[T]) Component(name string, fns ...LifecycleFunc) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	for _, item := range a.regs {
+		if item.name == name {
+			panic("summer: duplicated component with name: " + name)
+		}
+	}
+	reg := &componentRegistration{
+		name: name,
+	}
+	if len(fns) > 0 {
+		reg.startup = fns[0]
+	}
+	if len(fns) > 1 {
+		reg.check = fns[1]
+	}
+	if len(fns) > 2 {
+		reg.shutdown = fns[2]
+	}
+	a.regs = append(a.regs, reg)
 }
 
-func (a *app[T]) executeCheckers(ctx context.Context) (r string, failed bool) {
+func (a *app[T]) executeChecks(ctx context.Context) (res string, failed bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
 	sb := &strings.Builder{}
-	for k, fn := range a.checkers {
+
+	for _, item := range a.regs {
+		if item.check == nil {
+			return
+		}
 		if sb.Len() > 0 {
 			sb.WriteString("\n")
 		}
-		sb.WriteString(k)
+		sb.WriteString(item.name)
 		sb.WriteString(": ")
-		if err := fn(ctx); err == nil {
+		if err := item.check(ctx); err == nil {
 			sb.WriteString("OK")
 		} else {
 			failed = true
 			sb.WriteString(err.Error())
 		}
 	}
-	r = sb.String()
-	if r == "" {
-		r = "OK"
+
+	res = sb.String()
+
+	if res == "" {
+		res = "OK"
 	}
 	return
 }
@@ -82,7 +129,7 @@ func (a *app[T]) HandleFunc(pattern string, fn HandlerFunc[T]) {
 		otelhttp.WithRouteTag(
 			pattern,
 			http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-				c := a.contextFactory(rw, req)
+				c := a.cf(rw, req)
 				func() {
 					defer c.Perform()
 					fn(c)
@@ -92,12 +139,53 @@ func (a *app[T]) HandleFunc(pattern string, fn HandlerFunc[T]) {
 	)
 }
 
-func (a *app[T]) initialize() {
-	// checkers
-	a.checkers = map[string]CheckerFunc{}
+func (a *app[T]) Startup(ctx context.Context) (err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 
+	defer func() {
+		if err == nil {
+			return
+		}
+		for _, item := range a.init {
+			_ = item.shutdown(ctx)
+		}
+		a.init = nil
+	}()
+
+	for _, item := range a.regs {
+		if item.startup != nil {
+			if err = item.startup(ctx); err != nil {
+				return
+			}
+		}
+		a.init = append(a.init, item)
+	}
+
+	return
+}
+
+func (a *app[T]) Shutdown(ctx context.Context) (err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	for _, item := range a.init {
+		if err1 := item.shutdown(ctx); err1 != nil {
+			if err == nil {
+				err = err1
+			} else {
+				err = errors.New(err.Error() + "; " + err1.Error())
+			}
+		}
+	}
+	a.init = nil
+
+	return
+}
+
+func (a *app[T]) initialize() {
 	// promhttp handler
-	a.ph = promhttp.Handler()
+	a.p = promhttp.Handler()
 
 	// pprof handler
 	{
@@ -127,7 +215,7 @@ func (a *app[T]) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// alive, ready, metrics
 	if req.URL.Path == a.opts.readinessPath {
 		// readiness first, works when readinessPath == livenessPath
-		r, failed := a.executeCheckers(req.Context())
+		r, failed := a.executeChecks(req.Context())
 		status := http.StatusOK
 		if failed {
 			atomic.AddInt64(&a.readinessFailed, 1)
@@ -145,7 +233,7 @@ func (a *app[T]) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		}
 		return
 	} else if req.URL.Path == a.opts.metricsPath {
-		a.ph.ServeHTTP(rw, req)
+		a.p.ServeHTTP(rw, req)
 		return
 	}
 
@@ -169,7 +257,8 @@ func (a *app[T]) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 // New create an [App] with a custom [ContextFactory] and additional [Option]
 func New[T Context](cf ContextFactory[T], opts ...Option) App[T] {
 	a := &app[T]{
-		contextFactory: cf,
+		mu: &sync.Mutex{},
+		cf: cf,
 
 		opts: options{
 			concurrency:      128,
