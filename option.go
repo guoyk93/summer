@@ -3,6 +3,9 @@ package summer
 type options struct {
 	concurrency      int
 	readinessCascade int64
+	readinessPath    string
+	livenessPath     string
+	metricsPath      string
 }
 
 // Option a function configuring [App]
@@ -25,5 +28,26 @@ func WithConcurrency(c int) Option {
 func WithReadinessCascade(rc int) Option {
 	return func(opts *options) {
 		opts.readinessCascade = int64(rc)
+	}
+}
+
+// WithReadinessPath set readiness check path
+func WithReadinessPath(s string) Option {
+	return func(opts *options) {
+		opts.readinessPath = s
+	}
+}
+
+// WithLivenessPath set liveness path
+func WithLivenessPath(s string) Option {
+	return func(opts *options) {
+		opts.livenessPath = s
+	}
+}
+
+// WithMetricsPath set metrics path
+func WithMetricsPath(s string) Option {
+	return func(opts *options) {
+		opts.metricsPath = s
 	}
 }

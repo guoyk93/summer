@@ -9,8 +9,7 @@ const (
 	ContentTypeTextPlainUTF8       = "text/plain; charset=utf-8"
 	ContentTypeFormURLEncodedUTF8  = "application/x-www-form-urlencoded; charset=utf-8"
 
-	DebugPathPrefix  = "/debug/"
-	DebugPathReady   = "/debug/ready"
-	DebugPathAlive   = "/debug/alive"
-	DebugPathMetrics = "/debug/metrics"
+	DefaultReadinessPath = "/debug/ready"
+	DefaultLivenessPath  = "/debug/alive"
+	DefaultMetricsPath   = "/debug/metrics"
 )

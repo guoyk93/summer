@@ -40,8 +40,10 @@ type app[T Context] struct {
 
 	mux *http.ServeMux
 
-	h     http.Handler
-	debug http.Handler
+	h  http.Handler
+	ph http.Handler
+
+	pprof http.Handler
 
 	cc chan struct{}
 
@@ -94,33 +96,19 @@ func (a *app[T]) initialize() {
 	// checkers
 	a.checkers = map[string]CheckerFunc{}
 
-	// debug handler
-	m := &http.ServeMux{}
-	m.HandleFunc(DebugPathAlive, func(rw http.ResponseWriter, req *http.Request) {
-		if a.opts.readinessCascade > 0 && atomic.LoadInt64(&a.readinessFailed) > a.opts.readinessCascade {
-			respondText(rw, "CASCADED", http.StatusInternalServerError)
-		} else {
-			respondText(rw, "OK", http.StatusOK)
-		}
-	})
-	m.HandleFunc(DebugPathReady, func(rw http.ResponseWriter, req *http.Request) {
-		r, failed := a.executeCheckers(req.Context())
-		status := http.StatusOK
-		if failed {
-			atomic.AddInt64(&a.readinessFailed, 1)
-			status = http.StatusInternalServerError
-		} else {
-			atomic.StoreInt64(&a.readinessFailed, 0)
-		}
-		respondText(rw, r, status)
-	})
-	m.Handle(DebugPathMetrics, promhttp.Handler())
-	m.HandleFunc("/debug/pprof/", pprof.Index)
-	m.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	m.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	m.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	m.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	a.debug = m
+	// promhttp handler
+	a.ph = promhttp.Handler()
+
+	// pprof handler
+	{
+		m := &http.ServeMux{}
+		m.HandleFunc("/debug/pprof/", pprof.Index)
+		m.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		m.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		m.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		m.HandleFunc("/debug/pprof/trace", pprof.Trace)
+		a.pprof = m
+	}
 
 	// handler
 	a.mux = &http.ServeMux{}
@@ -136,8 +124,34 @@ func (a *app[T]) initialize() {
 }
 
 func (a *app[T]) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	if strings.HasPrefix(req.URL.Path, DebugPathPrefix) {
-		a.debug.ServeHTTP(rw, req)
+	// alive, ready, metrics
+	switch req.URL.Path {
+	case a.opts.livenessPath:
+		if a.opts.readinessCascade > 0 && atomic.LoadInt64(&a.readinessFailed) > a.opts.readinessCascade {
+			respondText(rw, "CASCADED", http.StatusInternalServerError)
+		} else {
+			respondText(rw, "OK", http.StatusOK)
+		}
+		return
+	case a.opts.readinessPath:
+		r, failed := a.executeCheckers(req.Context())
+		status := http.StatusOK
+		if failed {
+			atomic.AddInt64(&a.readinessFailed, 1)
+			status = http.StatusInternalServerError
+		} else {
+			atomic.StoreInt64(&a.readinessFailed, 0)
+		}
+		respondText(rw, r, status)
+		return
+	case a.opts.metricsPath:
+		a.ph.ServeHTTP(rw, req)
+		return
+	}
+
+	// pprof
+	if strings.HasPrefix(req.URL.Path, "/debug/") {
+		a.pprof.ServeHTTP(rw, req)
 		return
 	}
 
@@ -160,6 +174,9 @@ func New[T Context](cf ContextFactory[T], opts ...Option) App[T] {
 		opts: options{
 			concurrency:      128,
 			readinessCascade: 5,
+			readinessPath:    DefaultReadinessPath,
+			livenessPath:     DefaultLivenessPath,
+			metricsPath:      DefaultMetricsPath,
 		},
 	}
 	for _, opt := range opts {
