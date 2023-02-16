@@ -21,23 +21,23 @@ func respondText(rw http.ResponseWriter, s string, code int) {
 	_, _ = rw.Write(buf)
 }
 
-func flattenSlice[T any](s []T) any {
+func flattenSingleSlice[T any](s []T) any {
 	if len(s) == 1 {
 		return s[0]
 	}
 	return s
 }
 
-func flattenRequest(m map[string]any, req *http.Request) (err error) {
+func extractRequest(m map[string]any, req *http.Request) (err error) {
 	// header
 	for k, vs := range req.Header {
 		k = "header_" + strings.ToLower(strings.ReplaceAll(k, "-", "_"))
-		m[k] = flattenSlice(vs)
+		m[k] = flattenSingleSlice(vs)
 	}
 
 	// query
 	for k, vs := range req.URL.Query() {
-		v := flattenSlice(vs)
+		v := flattenSingleSlice(vs)
 		m[k] = v
 		m["query_"+k] = v
 	}
@@ -74,7 +74,7 @@ func flattenRequest(m map[string]any, req *http.Request) (err error) {
 			return
 		}
 		for k, vs := range q {
-			m[k] = flattenSlice(vs)
+			m[k] = flattenSingleSlice(vs)
 		}
 	default:
 		err = errors.New("unsupported request body type")

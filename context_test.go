@@ -7,6 +7,25 @@ import (
 	"testing"
 )
 
+func TestBind(t *testing.T) {
+	var hello string
+
+	a := Basic()
+	a.HandleFunc("/test", func(c Context) {
+		args := Bind[struct {
+			Hello string `json:"query_hello"`
+		}](c)
+
+		hello = args.Hello
+	})
+
+	req := httptest.NewRequest("GET", "https://example.com/test?hello=world", nil)
+
+	a.ServeHTTP(httptest.NewRecorder(), req)
+
+	require.Equal(t, "world", hello)
+}
+
 func TestContext(t *testing.T) {
 	req := httptest.NewRequest("GET", "https://example.com/get?aaa=bbb", nil)
 	rw := httptest.NewRecorder()

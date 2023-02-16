@@ -11,6 +11,25 @@ import (
 	"time"
 )
 
+// Bind a generic version of [Context.Bind]
+//
+// example:
+//
+//		func actionValidate(c summer.Context) {
+//			args := summer.Bind[struct {
+//	       		Tenant       string `json:"header_x_tenant"`
+//				Username     string `json:"username"`
+//				Age 		 int    `json:"age,string"`
+//			}](c)
+//	        _ = args.Tenant
+//	        _ = args.Username
+//	        _ = args.Age
+//		}
+func Bind[T any](c Context) (o T) {
+	c.Bind(&o)
+	return
+}
+
 // Context the most basic context of a incoming request and corresponding response
 type Context interface {
 	// Context extend the [context.Context] interface by proxying to [http.Request.Context]
@@ -86,8 +105,8 @@ func (c *basicContext) Res() http.ResponseWriter {
 
 func (c *basicContext) receive() {
 	var m = map[string]any{}
-	if err := flattenRequest(m, c.req); err != nil {
-		panic(ErrorWithHTTPStatus(err, http.StatusBadRequest))
+	if err := extractRequest(m, c.req); err != nil {
+		Halt(err, HaltWithStatusCode(http.StatusBadRequest))
 	}
 	c.buf = rg.Must(json.Marshal(m))
 }
@@ -125,17 +144,14 @@ func (c *basicContext) JSON(data interface{}) {
 func (c *basicContext) Perform() {
 	if r := recover(); r != nil {
 		var (
-			message string
-			code    = http.StatusInternalServerError
+			e  error
+			ok bool
 		)
-		if re, ok := r.(error); ok {
-			message = re.Error()
-			code = HTTPStatusFromError(re)
-		} else {
-			message = fmt.Sprintf("panic: %v", r)
+		if e, ok = r.(error); !ok {
+			e = fmt.Errorf("panic: %v", r)
 		}
-		c.Code(code)
-		c.JSON(map[string]any{"message": message})
+		c.Code(StatusCodeFromError(e))
+		c.JSON(BodyFromError(e))
 	}
 	c.sendOnce.Do(c.send)
 }

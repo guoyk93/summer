@@ -3,27 +3,54 @@ package summer
 import (
 	"errors"
 	"github.com/stretchr/testify/require"
+	"net/http"
 	"testing"
 )
 
-type wrappedError struct {
-	error
+func TestHalt(t *testing.T) {
+	var err error
+	func() {
+		defer func() {
+			err = recover().(error)
+		}()
+
+		HaltString(
+			"test",
+			HaltWithStatusCode(http.StatusTeapot),
+			HaltWithExtra("aaa", "bbb"),
+			HaltWithExtras(map[string]any{
+				"ccc": "ddd",
+				"eee": "fff",
+			}),
+		)
+	}()
+	m := BodyFromError(err)
+	require.Equal(t, http.StatusTeapot, StatusCodeFromError(err))
+	require.Equal(t, map[string]any{"message": "test", "aaa": "bbb", "ccc": "ddd", "eee": "fff"}, m)
 }
 
-func (we wrappedError) Unwrap() error {
-	return we.error
+func TesPanicError(t *testing.T) {
+	var err error
+	func() {
+		defer func() {
+			err = recover().(error)
+		}()
+		panic(errors.New("TEST1"))
+	}()
+	m := BodyFromError(err)
+	require.Equal(t, http.StatusInternalServerError, StatusCodeFromError(err))
+	require.Equal(t, map[string]any{"message": "TEST1"}, m)
 }
 
-func TestErrorCode(t *testing.T) {
-
-	ec := ErrorWithHTTPStatus(errors.New("TEST"), 400)
-	require.Equal(t, "TEST", ec.Error())
-	require.Equal(t, 400, HTTPStatusFromError(ec))
-	require.Equal(t, 400, HTTPStatusFromError(wrappedError{error: ec}))
-	require.Equal(t, 500, HTTPStatusFromError(errors.New("500")))
-}
-
-func TestErrorWithCode(t *testing.T) {
-	ec := ErrorWithHTTPStatus(errors.New("TEST"), 400)
-	require.Equal(t, "TEST", ec.Error())
+func TesPanicAny(t *testing.T) {
+	var err error
+	func() {
+		defer func() {
+			err = recover().(error)
+		}()
+		panic("TEST1")
+	}()
+	m := BodyFromError(err)
+	require.Equal(t, http.StatusInternalServerError, StatusCodeFromError(err))
+	require.Equal(t, map[string]any{"message": "panic: TEST1"}, m)
 }
