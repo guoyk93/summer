@@ -27,6 +27,26 @@ func TestHalt(t *testing.T) {
 	m := BodyFromError(err)
 	require.Equal(t, http.StatusTeapot, StatusCodeFromError(err))
 	require.Equal(t, map[string]any{"message": "test", "aaa": "bbb", "ccc": "ddd", "eee": "fff"}, m)
+
+	func() {
+		defer func() {
+			err = recover().(error)
+		}()
+
+		HaltString(
+			"test",
+			HaltWithStatusCode(http.StatusTeapot),
+			HaltWithExtras(map[string]any{
+				"ccc": "ddd",
+				"eee": "fff",
+			}),
+			HaltWithExtra("aaa", "bbb"),
+			HaltWithMessage("test2"),
+		)
+	}()
+	m = BodyFromError(err)
+	require.Equal(t, http.StatusTeapot, StatusCodeFromError(err))
+	require.Equal(t, map[string]any{"message": "test2", "aaa": "bbb", "ccc": "ddd", "eee": "fff"}, m)
 }
 
 func TesPanicError(t *testing.T) {
