@@ -13,7 +13,7 @@ func TestApp(t *testing.T) {
 	bad := true
 
 	a := Basic(WithReadinessCascade(1), WithConcurrency(1))
-	a.Component("test-1", nil, func(ctx context.Context) (err error) {
+	a.Component("test-1").Check(func(ctx context.Context) (err error) {
 		if bad {
 			return errors.New("test-failed")
 		} else {

@@ -17,29 +17,36 @@ func TestRegistry(t *testing.T) {
 		t2b bool
 		t2c bool
 	)
-	a.Component("test-1", func(ctx context.Context) (err error) {
-		t1a = true
-		return
-	}, func(ctx context.Context) (err error) {
-		t1b = true
-		return
-	}, func(ctx context.Context) (err error) {
-		t1c = true
-		return
-	})
-	a.Component("test-2", func(ctx context.Context) (err error) {
-		t2a = true
-		err = errors.New("BBB")
-		return
-	}, func(ctx context.Context) (err error) {
-		t2b = true
-		return
-	}, func(ctx context.Context) (err error) {
-		t2c = true
-		return
-	})
+	a.Component("test-1").
+		Startup(func(ctx context.Context) (err error) {
+			t1a = true
+			return
+		}).
+		Check(func(ctx context.Context) (err error) {
+			t1b = true
+			return
+		}).
+		Shutdown(func(ctx context.Context) (err error) {
+			t1c = true
+			return
+		})
+
+	a.Component("test-2").
+		Startup(func(ctx context.Context) (err error) {
+			t2a = true
+			return errors.New("BBB")
+		}).
+		Check(func(ctx context.Context) (err error) {
+			t2b = true
+			return
+		}).
+		Shutdown(func(ctx context.Context) (err error) {
+			t2c = true
+			return
+		})
 
 	err := a.Startup(context.Background())
+
 	require.Error(t, err)
 	require.Equal(t, "BBB", err.Error())
 	require.True(t, t1a)

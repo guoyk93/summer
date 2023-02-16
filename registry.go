@@ -13,7 +13,7 @@ type Registry interface {
 	// Component register a component
 	//
 	// In order of `startup`, `check` and `shutdown`
-	Component(name string, fns ...LifecycleFunc)
+	Component(name string) Registration
 
 	// Startup start all registered components
 	Startup(ctx context.Context) (err error)
@@ -25,11 +25,45 @@ type Registry interface {
 	Shutdown(ctx context.Context) (err error)
 }
 
+// Registration a registration in [Registry]
+type Registration interface {
+	// Name returns name of registration
+	Name() string
+
+	// Startup set startup function
+	Startup(fn LifecycleFunc) Registration
+
+	// Check set check function
+	Check(fn LifecycleFunc) Registration
+
+	// Shutdown set shutdown function
+	Shutdown(fn LifecycleFunc) Registration
+}
+
 type registration struct {
 	name     string
 	startup  LifecycleFunc
 	check    LifecycleFunc
 	shutdown LifecycleFunc
+}
+
+func (r *registration) Name() string {
+	return r.name
+}
+
+func (r *registration) Startup(fn LifecycleFunc) Registration {
+	r.startup = fn
+	return r
+}
+
+func (r *registration) Check(fn LifecycleFunc) Registration {
+	r.check = fn
+	return r
+}
+
+func (r *registration) Shutdown(fn LifecycleFunc) Registration {
+	r.shutdown = fn
+	return r
 }
 
 type registry struct {
@@ -38,7 +72,7 @@ type registry struct {
 	init []*registration
 }
 
-func (a *registry) Component(name string, fns ...LifecycleFunc) {
+func (a *registry) Component(name string) Registration {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -47,19 +81,14 @@ func (a *registry) Component(name string, fns ...LifecycleFunc) {
 			panic("duplicated component with name: " + name)
 		}
 	}
+
 	reg := &registration{
 		name: name,
 	}
-	if len(fns) > 0 {
-		reg.startup = fns[0]
-	}
-	if len(fns) > 1 {
-		reg.check = fns[1]
-	}
-	if len(fns) > 2 {
-		reg.shutdown = fns[2]
-	}
+
 	a.regs = append(a.regs, reg)
+
+	return reg
 }
 
 func (a *registry) Startup(ctx context.Context) (err error) {
